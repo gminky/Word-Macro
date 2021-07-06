@@ -1,0 +1,968 @@
+Option Explicit
+
+Public ObjEventHandler As clsEventHandler
+
+Dim errFlg As Boolean
+
+Sub rtf法案縦書変換()
+'------------------------------------------------------------------
+' 縦書きフォーマット変更
+' Ｗｅｂ版の新旧対照表ツールから出力したrtfを、
+' 一太郎作成の法案の編集で作成したファイルに見た目に近づける変換を行う。
+'------------------------------------------------------------------
+
+On Error GoTo errMsg
+    errFlg = False
+    Dim msg As String
+    msg = "縦書変換が完了しました。"
+    
+    '処理中描画停止
+    Application.ScreenUpdating = False
+           
+    'タイトルを一字更に字下げ
+    Selection.HomeKey Unit:=wdStory
+    With Selection.ParagraphFormat
+        .CharacterUnitLeftIndent = 4
+    End With
+           
+    '縦書き変換
+    ActiveDocument.Select
+
+    Selection.WholeStory
+    Selection.Orientation = wdTextOrientationVerticalFarEast
+    
+    With Selection.ParagraphFormat
+        .LineSpacingRule = wdLineSpaceSingle
+        .FarEastLineBreakControl = False
+        .HangingPunctuation = True
+    End With
+    With Selection.Font
+        .Spacing = 0
+        .Name = "ＭＳ 明朝"
+        .Size = 14
+    End With
+    
+    Call 縦中横処理
+    
+    Call 閣議請議用枠非表示
+    
+    Call 句読点のぶら下げ処理
+    
+    Call ページ数調整
+    
+    Call 閣議請議用枠表示
+    
+    'wakuFlg = MsgBox("閣議請議用の青枠を表示しますか？", vbYesNo)
+    'If wakuFlg = vbYes Then
+    '    Call 閣議請議用枠表示
+    'End If
+    
+    If errFlg = True Then
+        Exit Sub
+    End If
+    
+    
+Finally:
+On Error Resume Next
+
+    Selection.HomeKey Unit:=wdStory
+    
+    '処理中描画再開
+    Application.ScreenUpdating = True
+    
+    '処理終了メッセージ
+    MsgBox (msg)
+    
+Exit Sub
+
+errMsg:
+
+    msg = "縦書変換に失敗しました。" & vbCrLf & "Word用法案ファイルが正しくない可能性があります。"
+    
+    Resume Finally
+    
+End Sub
+
+Private Sub 縦中横処理()
+  '--------------------------------------------------------------------------
+  '縦中横処理を行う
+  '（表内の１セル毎に、行頭が以下のものを処理対象とする）
+  ' ・括弧付き数字「(１)、(２)」
+  ' ・括弧付きローマ数字（小）「(ｉ)、(ｉｉ)」
+  ' ・括弧付きローマ数字（大）「(Ｉ)、(ＩＩ)」
+  ' ・括弧付き漢数字「(一)、(二)」
+  ' ・括弧付きイロハ「(イ)、(ロ)」
+  ' ・括弧付きアイウ「(ア)、(イ)」
+  ' ・括弧付き英字（小）「(ａ)、(ｂ)」
+  ' ・括弧付き英字（大）「(Ａ)、(Ｂ)」
+  ' 20180209 行頭のみの判定は廃止。本文中に含まれる全てを対象とする。
+  ' 20180307 Ｗｅｂ版新旧対照表ツールの号細で選択できる括弧付き表記全てを対象とする。
+  '--------------------------------------------------------------------------
+    Dim targetList As New Collection
+    Dim targetName As String
+    Dim targetReg As Object
+    Dim matches
+    Dim targetLen As Integer
+    Dim lineWide As Single
+    Dim ListIndex As Integer
+    Dim fRng As Object
+    Dim targetRange As Object
+    Dim match As Object
+    Set targetReg = CreateObject("VBScript.RegExp")
+    targetList.Add ("（[ｉｖｘＩＶＸ]{1,}）") '括弧付きローマ数字
+    targetList.Add ("（[一二三四五六七八九十〇の０-９]{1,}）") '括弧付き数字、漢数字
+    targetList.Add ("（[ア-ン]{1,1}）") '括弧付きイロハ、アイウ（カタカナ）
+    targetList.Add ("（[ａ-ｚＡ-Ｚ]{1,1}）") '括弧付き英字
+
+    For ListIndex = 1 To targetList.Count
+        targetName = targetList(ListIndex)
+        
+        '対象形式の場合、半角に変換し縦中横表記にする
+        Set fRng = ActiveDocument.Range(Start:=0, End:=0)
+        
+        With fRng.Find
+            .MatchCase = False
+            .MatchWholeWord = False
+            .MatchByte = False
+            .MatchAllWordForms = False
+            .MatchSoundsLike = False
+            .MatchFuzzy = False
+            .MatchWildcards = True
+            .Text = targetName
+        End With
+        Do
+            If fRng.Find.Execute = False Then Exit Do
+            targetRange = fRng.Text
+            targetLen = fRng.Characters.Count
+            fRng.CharacterWidth = wdWidthHalfWidth
+            fRng.HorizontalInVertical = wdHorizontalInVerticalFitInLine '幅を広く設定する場合　 fRng.HorizontalInVertical = wdHorizontalInVerticalResizeLine
+            fRng.Collapse Direction:=wdCollapseEnd
+            
+            fRng.Select
+            With Selection.ParagraphFormat
+                If targetLen = 3 Then
+                    .LineUnitAfter = 0.12
+                    With targetReg
+                        .Pattern = "（[一二三四五六七八九十]）"
+                        .IgnoreCase = False
+                        .Global = True
+                    End With
+                    Set matches = targetReg.Execute(targetRange)
+                    For Each match In matches
+                        lineWide = 0.24 ' 漢数字が一文字の場合は0.24の間隔を行後に追加する
+                        If .LineUnitAfter < lineWide Then ' 元の幅よりも大きくする必要があるときのみセット
+                            .LineUnitAfter = lineWide
+                        End If
+                    Next match
+                Else
+                    lineWide = 0.36 + (0.08 * (targetLen - 3)) ' 3文字以上の場合は1文字につき、0.08の間隔を行後に追加する
+                    If .LineUnitAfter < lineWide Then ' 元の幅よりも大きくする必要があるときのみセット
+                        .LineUnitAfter = lineWide
+                    End If
+                    If targetLen > 4 Then
+                        lineWide = 0.36 + (0.08 * (targetLen - 4)) ' 4文字以上の場合は1文字につき、0.08の間隔を行前に追加する
+                        If .LineUnitBefore < lineWide Then ' 元の幅よりも大きくする必要があるときのみセット
+                            .LineUnitBefore = lineWide
+                        End If
+                    End If
+                End If
+            End With
+        Loop
+    Next
+End Sub
+
+Function 法案ファイル内容コピー() As Boolean
+    法案ファイル内容コピー = False
+    Dim rtfFileExistsFlg As Boolean
+    Dim filePath As String
+    Dim rtfPath As String
+    Dim docxPath As String
+    Dim defaultDoc As Word.Document
+    Dim fileName As String
+    Dim extentionName As String
+    Dim folderName As String
+    Dim tmpFolderName As String
+    Dim fso As Object
+    Dim sh As Object
+    Dim zfo As Object
+    Dim tfo As Object
+    Dim f As Object
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    rtfFileExistsFlg = False
+    filePath = ファイル選択
+    
+    Set defaultDoc = ActiveDocument
+    If filePath <> "" Then
+        extentionName = fso.GetExtensionName(filePath)
+        
+        If extentionName = "zip" Then
+            ' zipの場合tempフォルダに解凍して、rtfファイルがあることを確認
+            folderName = fso.GetParentFolderName(filePath)
+            fileName = fso.GetBaseName(filePath)
+            tmpFolderName = folderName & "\" & fileName & "temp"
+            If fso.folderExists(tmpFolderName) = True Then
+                fso.deleteFolder tmpFolderName
+            End If
+            fso.CreateFolder tmpFolderName
+            Set sh = CreateObject("Shell.Application")
+            Set zfo = sh.Namespace(fso.GetAbsolutePathName(filePath))
+            Set tfo = sh.Namespace(fso.GetAbsolutePathName(tmpFolderName))
+            
+            For Each f In zfo.Items
+                If (f.IsFolder = False) And (f.Name = fileName & ".rtf") Then
+                    '対象ファイルだった場合、tmpフォルダを作成し展開する
+                    rtfFileExistsFlg = True
+                    tfo.CopyHere f
+                End If
+            Next
+            
+            '展開したrtfファイルパスをセット
+            rtfPath = tmpFolderName & "\" & fileName & ".rtf"
+            
+        Else
+            'rtfファイル指定なので、ファイルパスをそのままセット
+            rtfFileExistsFlg = True
+            rtfPath = filePath
+           
+        End If
+        
+        '対象のrtfファイルが存在した場合、ファイルを読み込む
+        If rtfFileExistsFlg = True Then
+            docxPath = rtfPath & ".tmp"
+            Documents.Open rtfPath
+            Documents(rtfPath).Activate
+            
+            ActiveDocument.SaveAs fileName:=docxPath, FileFormat:=wdFormatXMLDocument
+            
+            Selection.WholeStory
+            Selection.Copy
+            
+            defaultDoc.Activate
+            defaultDoc.StoryRanges(wdMainTextStory).Select
+            Selection.PasteAndFormat (wdPasteDefault)
+            Selection.Delete '余分に入る末尾の改行を削除
+        End If
+ErrHandler:
+
+        GoTo Finally
+        
+Finally:
+        '作業ファイルを閉じ、削除する
+        Documents(docxPath).Close
+        
+        If fso.folderExists(tmpFolderName) = True Then
+            fso.deleteFolder tmpFolderName
+        End If
+        If fso.fileExists(docxPath) = True Then
+            fso.deleteFile docxPath
+        End If
+        'Kill docxPath
+        If rtfFileExistsFlg = True Then
+            法案ファイル内容コピー = True
+        Else
+            MsgBox ("対象のWord用法案ファイルが見つかりませんでした。")
+        End If
+    End If
+End Function
+
+Private Function ファイル選択() As String
+    Dim myFD As FileDialog
+    
+    Set myFD = Application.FileDialog(msoFileDialogFilePicker)
+    
+    ファイル選択 = ""
+    
+    With myFD
+        .Title = "縦書変換するWord用法案ファイルを選択してください。"
+        .AllowMultiSelect = False
+        
+        .Filters.Clear
+        .Filters.Add "Word用法案ファイル", "*.rtf,*.zip"
+        
+        If .Show = -1 Then
+            ファイル選択 = .SelectedItems(1)
+        End If
+        
+        .Filters.Clear
+        
+    End With
+    
+    Set myFD = Nothing
+    
+End Function
+
+Sub 閣議請議用枠表示()
+'
+' 枠線とページフッターを閣議請議用に変更
+'
+'
+
+On Error GoTo errMsg
+    Dim msg As String
+    '処理中描画停止
+    Application.ScreenUpdating = False
+           
+    With ActiveDocument.PageSetup
+        '余白指定
+        .TopMargin = MillimetersToPoints(26.5)
+'20181004 change
+'        .BottomMargin = MillimetersToPoints(21)
+        .BottomMargin = MillimetersToPoints(25)
+        .LeftMargin = MillimetersToPoints(25)
+        .RightMargin = MillimetersToPoints(25)
+'20181004 add
+        .FooterDistance = MillimetersToPoints(13)
+        
+        '最大文字数、列数
+'20181004 change
+'        .CharsLine = 64
+'        .LayoutMode = wdLayoutModeGrid
+        .LayoutMode = wdLayoutModeLineGrid
+        .LinesPage = 13
+    End With
+    
+    'フォーマット変換
+    ActiveDocument.Select
+    
+    '枠線表示
+    With Selection.Sections(1)
+        With .Borders(wdBorderLeft)
+            .LineStyle = wdLineStyleThinThickSmallGap
+            .LineWidth = wdLineWidth300pt
+            .Color = 11665261
+        End With
+        With .Borders(wdBorderRight)
+            .LineStyle = wdLineStyleThickThinSmallGap
+            .LineWidth = wdLineWidth300pt
+            .Color = 11665261
+        End With
+        With .Borders(wdBorderTop)
+            .LineStyle = wdLineStyleThinThickSmallGap
+            .LineWidth = wdLineWidth300pt
+            .Color = 11665261
+        End With
+        With .Borders(wdBorderBottom)
+            .LineStyle = wdLineStyleThickThinSmallGap
+            .LineWidth = wdLineWidth300pt
+            '.Color = 11534189
+            .Color = 11665261
+        End With
+        With .Borders
+            .DistanceFrom = wdBorderDistanceFromText
+            .AlwaysInFront = True
+            .SurroundHeader = False
+            .SurroundFooter = False
+            .JoinBorders = False
+            .DistanceFromTop = 12
+            .DistanceFromLeft = 1
+'181004 change
+'            .DistanceFromBottom = 3
+            .DistanceFromBottom = 12
+            .DistanceFromRight = 2
+            .Shadow = False
+            .EnableFirstPageInSection = True
+            .EnableOtherPagesInSection = True
+            .ApplyPageBordersToAllSections
+        End With
+    End With
+    
+'181004 add
+    Selection.Font.Spacing = 0.2
+    Selection.Paragraphs.Alignment = wdAlignParagraphJustify
+    
+    With Options
+        .DefaultBorderLineStyle = wdLineStyleThinThickSmallGap
+        .DefaultBorderLineWidth = wdLineWidth300pt
+        .DefaultBorderColor = 11665261
+    End With
+    ActiveWindow.ActivePane.VerticalPercentScrolled = 0
+    
+    Call 提出用フッターセット
+        
+Finally:
+On Error Resume Next
+
+    Selection.HomeKey Unit:=wdStory
+        
+Exit Sub
+
+errMsg:
+
+    'エラーメッセージ
+    msg = "閣議請議用枠表示に失敗しました。"
+    MsgBox (msg)
+    
+    Resume Finally
+    
+End Sub
+
+Private Sub 提出用フッターセット()
+  '--------------------------------------------------------------------------
+  '提出用のフッターを設定する。
+  '--------------------------------------------------------------------------
+
+    Dim sec As Section
+    Dim hd_ft As HeaderFooter
+    Dim tategakiTemplatePath As String
+        
+    '画面をヘッダーフッター編集モードに切り替え
+    ActiveWindow.ActivePane.View.SeekView = wdSeekCurrentPageHeader
+    
+    'フッターを選択
+    For Each sec In ActiveDocument.Sections
+        If sec.Footers.Count > 0 Then
+            Set hd_ft = sec.Footers(1)
+            '書式設定・位置調整
+            hd_ft.Range.Select
+            Selection.TypeText Text:="日本国政府"
+            
+            hd_ft.Range.Select
+            With Selection.Font
+                .NameFarEast = "HGS明朝E"
+                .NameAscii = "HGS明朝E"
+                .NameOther = "HGS明朝E"
+                .Name = "HGS明朝E"
+                .Size = 13.5
+                .Bold = False
+                .Italic = False
+                .Underline = wdUnderlineNone
+                .UnderlineColor = wdColorAutomatic
+                .StrikeThrough = False
+                .DoubleStrikeThrough = False
+                .Outline = False
+                .Emboss = False
+                .Shadow = False
+                .Hidden = False
+                .SmallCaps = False
+                .AllCaps = False
+                .Color = 11665261
+                .Engrave = False
+                .Superscript = False
+                .Subscript = False
+                .Spacing = 0.71
+                .Scaling = 100
+                .Position = 0
+                .Kerning = 0
+                .Animation = wdAnimationNone
+                .DisableCharacterSpaceGrid = True
+                .EmphasisMark = wdEmphasisMarkNone
+                .Ligatures = wdLigaturesNone
+                .NumberSpacing = wdNumberSpacingDefault
+                .NumberForm = wdNumberFormDefault
+                .StylisticSet = wdStylisticSetDefault
+                .ContextualAlternates = 0
+            End With
+            
+            With Selection.Frames(1)
+                With .Borders(wdBorderLeft)
+                    .LineStyle = wdLineStyleSingle
+                    .LineWidth = wdLineWidth100pt
+                    .Color = 11665261
+                End With
+                With .Borders(wdBorderRight)
+                    .LineStyle = wdLineStyleSingle
+                    .LineWidth = wdLineWidth100pt
+                    .Color = 11665261
+                End With
+                With .Borders(wdBorderTop)
+                    .LineStyle = wdLineStyleSingle
+                    .LineWidth = wdLineWidth100pt
+                    .Color = 11665261
+                End With
+                With .Borders(wdBorderBottom)
+                    .LineStyle = wdLineStyleSingle
+                    .LineWidth = wdLineWidth100pt
+                    .Color = 11665261
+                End With
+                .WidthRule = wdFrameExact
+                .HeightRule = wdFrameExact
+                .Width = MillimetersToPoints(26.28)
+                .Height = MillimetersToPoints(7.9)
+                .Borders.Shadow = False
+                .HorizontalPosition = MillimetersToPoints(67)
+'181004 change
+                '.VerticalPosition = MillimetersToPoints(-6.1)
+                .VerticalPosition = MillimetersToPoints(-6.6)
+            End With
+            With Options
+                .DefaultBorderLineStyle = wdLineStyleSingle
+                .DefaultBorderLineWidth = wdLineWidth100pt
+                .DefaultBorderColor = 11665261
+            End With
+            
+        End If
+    Next sec
+    
+    '画面をメイン編集モードに切り替え
+    ActiveWindow.ActivePane.View.SeekView = wdSeekMainDocument
+    
+End Sub
+
+
+Sub 閣議請議用枠非表示()
+'
+' 枠線とページフッターを確認用に変更
+'
+'
+On Error GoTo errMsg
+    Dim msg As String
+    errFlg = False
+    
+    '処理中描画停止
+    Application.ScreenUpdating = False
+           
+    With ActiveDocument.PageSetup
+        '余白指定
+        .TopMargin = MillimetersToPoints(25)
+'20181004 change
+        '.BottomMargin = MillimetersToPoints(23.5)
+        .BottomMargin = MillimetersToPoints(27.5)
+        .LeftMargin = MillimetersToPoints(24.5)
+        .RightMargin = MillimetersToPoints(25.5)
+'20181004 add
+        .FooterDistance = MillimetersToPoints(13)
+        
+'20181004 change
+'        .CharsLine = 64
+'        .LayoutMode = wdLayoutModeGrid
+        .LayoutMode = wdLayoutModeLineGrid
+        .LinesPage = 13
+    End With
+    
+    'フォーマット変換
+    ActiveDocument.Select
+    
+    '枠線非表示
+    With Selection.Sections(1)
+        .Borders(wdBorderLeft).LineStyle = wdLineStyleNone
+        .Borders(wdBorderRight).LineStyle = wdLineStyleNone
+        .Borders(wdBorderTop).LineStyle = wdLineStyleNone
+        .Borders(wdBorderBottom).LineStyle = wdLineStyleNone
+        With .Borders
+            .DistanceFrom = wdBorderDistanceFromPageEdge
+            .AlwaysInFront = True
+            .SurroundHeader = False
+            .SurroundFooter = False
+            .JoinBorders = False
+            .DistanceFromTop = 24
+            .DistanceFromLeft = 24
+            .DistanceFromBottom = 24
+            .DistanceFromRight = 24
+            .Shadow = False
+            .EnableFirstPageInSection = True
+            .EnableOtherPagesInSection = True
+            .ApplyPageBordersToAllSections
+        End With
+        
+    End With
+    
+'181004 add
+    Selection.Font.Spacing = 0.2
+    Selection.Paragraphs.Alignment = wdAlignParagraphJustify
+    
+    With Options
+        .DefaultBorderLineStyle = wdLineStyleThinThickSmallGap
+        .DefaultBorderLineWidth = wdLineWidth300pt
+        .DefaultBorderColor = 11665261
+    End With
+    'ActiveWindow.ActivePane.VerticalPercentScrolled = -175
+    
+    Call 確認用フッターセット
+    
+Finally:
+On Error Resume Next
+
+    Selection.HomeKey Unit:=wdStory
+            
+Exit Sub
+
+errMsg:
+    errFlg = True
+
+    'エラーメッセージ
+    msg = "閣議請議用枠非表示に失敗しました。"
+    MsgBox (msg)
+    
+    Resume Finally
+    
+End Sub
+
+Private Sub 確認用フッターセット()
+  '--------------------------------------------------------------------------
+  '確認用のフッターを設定する。
+  '--------------------------------------------------------------------------
+
+On Error GoTo errMsg
+    Dim sec As Section
+    Dim hd_ft As HeaderFooter
+    Dim tategakiTemplatePath As String
+    Dim msg As String
+        
+    '画面をヘッダーフッター編集モードに切り替え
+    ActiveWindow.ActivePane.View.SeekView = wdSeekCurrentPageHeader
+    
+    'フッターを選択
+    For Each sec In ActiveDocument.Sections
+        If sec.Footers.Count > 0 Then
+            Set hd_ft = sec.Footers(1)
+            '書式設定・位置調整
+            hd_ft.Range.Select
+            Selection.TypeText Text:=""
+            Selection.Text = ""
+            Selection.Fields.Add Range:=Selection.Range, Type:=wdFieldPage
+            hd_ft.Range.Select
+            With Selection.Font
+                .NameFarEast = "ＭＳ　明朝"
+                .NameAscii = "ＭＳ　明朝"
+                '.NameOther = "ＭＳ　明朝"
+                .Name = "ＭＳ　明朝"
+                .Size = 13
+                .Bold = False
+                .Italic = False
+                .Underline = wdUnderlineNone
+                .UnderlineColor = wdColorAutomatic
+                .StrikeThrough = False
+                .DoubleStrikeThrough = False
+                .Outline = False
+                .Emboss = False
+                .Shadow = False
+                .Hidden = False
+                .SmallCaps = False
+                .AllCaps = False
+                .Color = 0
+                .Engrave = False
+                .Superscript = False
+                .Subscript = False
+                .Spacing = 0.71
+                .Scaling = 100
+                .Position = 0
+                .Kerning = 0
+                .Animation = wdAnimationNone
+                .DisableCharacterSpaceGrid = True
+                .EmphasisMark = wdEmphasisMarkNone
+                .Ligatures = wdLigaturesNone
+                .NumberSpacing = wdNumberSpacingDefault
+                .NumberForm = wdNumberFormDefault
+                .StylisticSet = wdStylisticSetDefault
+                .ContextualAlternates = 0
+            End With
+            
+            With Selection.Frames(1)
+                .Select
+                With .Borders(wdBorderLeft)
+                    .LineStyle = wdLineStyleNone
+                End With
+                With .Borders(wdBorderRight)
+                    .LineStyle = wdLineStyleNone
+                End With
+                With .Borders(wdBorderTop)
+                    .LineStyle = wdLineStyleNone
+                End With
+                With .Borders(wdBorderBottom)
+                    .LineStyle = wdLineStyleNone
+                End With
+                .Borders.Shadow = False
+                .WidthRule = wdFrameAuto
+                .HeightRule = wdFrameAuto
+                .HorizontalPosition = MillimetersToPoints(69.95)
+                .VerticalPosition = MillimetersToPoints(-0.5)
+                .TextWrap = True
+            End With
+            
+    'ページ番号の書式設定・位置調整
+    With Selection.HeaderFooter.PageNumbers
+        .NumberStyle = wdPageNumberStyleNumberInDash
+        .HeadingLevelForChapter = 0
+        .IncludeChapterNumber = False
+        .ChapterPageSeparator = wdSeparatorHyphen
+        .RestartNumberingAtSection = True
+        .StartingNumber = 1
+        
+    End With
+    
+        End If
+    Next sec
+    
+Finally:
+
+    '画面をメイン編集モードに切り替え
+    ActiveWindow.ActivePane.View.SeekView = wdSeekMainDocument
+    
+Exit Sub
+errMsg:
+    errFlg = True
+
+    'エラーメッセージ
+    msg = "閣議請議用枠非表示に失敗しました。"
+    MsgBox (msg)
+    
+    Resume Finally
+    
+End Sub
+
+Sub ページ数調整()
+  '--------------------------------------------------------------------------
+  '法案と理由のページ数を偶数に調整する。
+  '--------------------------------------------------------------------------
+    
+    Dim checkLabel As String ' 理由開始判定文言
+    checkLabel = "理由"
+    
+    Dim targetIndex As Single
+    Dim mokujiIndex As Single
+    Dim mokujiTitleIndex As Single
+    Dim hanreiTitleIndex As Single
+    Dim riyuPage As Integer
+    Dim lastPage As Integer
+    Dim addPage As Integer
+    Dim riyuPageCnt As Integer
+    Dim targetEndFlg As Boolean
+    Dim checkText As String
+    Dim riyuUmuFlg As Boolean
+    Dim mokujiUmuFlg As Boolean
+    
+    Dim paragraphsCnt As Single
+    paragraphsCnt = ActiveDocument.Paragraphs.Count
+    
+    Dim targetName As String
+    Dim houreiList As New Collection
+    Dim houreiIndexList As New Collection
+    Dim targetReg As Object
+    Dim matches
+    Dim targetLen As Integer
+    Dim lineWide As Single
+    Dim fRng As Object
+    Dim lastRng As Object
+    Dim riyuRng As Object
+    Dim riyuTitleIndex  As Integer
+    Set targetReg = CreateObject("VBScript.RegExp")
+
+    targetIndex = 1
+    targetEndFlg = False
+    mokujiUmuFlg = False
+    
+    Do
+        If targetEndFlg = True Then Exit Do
+        
+        
+        '対象の場合、目次の更新を行う
+        Set fRng = ActiveDocument.Paragraphs(targetIndex).Range
+        'checkText = Left(Replace(Replace(fRng.Paragraphs(1).Range.Text, "　", " "), " ", ""), 2)
+        checkText = Mid(Replace(Replace(fRng.Paragraphs(1).Range.Text, "　", " "), " ", ""), 2, 2)
+        If checkText = checkLabel Then
+            riyuUmuFlg = True
+            '理由タイトルの位置セット
+            riyuTitleIndex = targetIndex
+            fRng.Select
+            riyuPage = Selection.Information(wdActiveEndPageNumber) 'ページ数セット
+            
+            '目次項目終了
+            Exit Do
+        End If
+        
+        targetIndex = targetIndex + 1
+        
+        '「理由」が見つからない場合は処理を抜ける（理由なしと判定）
+        If targetIndex > ActiveDocument.Paragraphs.Count Then Exit Do
+    Loop
+
+    '最終頁数取得
+    Set lastRng = ActiveDocument.Paragraphs(ActiveDocument.Paragraphs.Count).Range
+    lastRng.Select
+    lastPage = Selection.Information(wdActiveEndPageNumber) 'ページ数セット
+    
+    If riyuUmuFlg = True Then
+        '理由ページ数（最終頁 - 理由頁）
+        riyuPageCnt = lastPage - riyuPage + 1
+    
+        ' 理由頁が偶数の場合は法案部が奇数ページなので、１ページ追加（理由ページの直前に改ページ挿入）
+        If riyuPage Mod 2 = 0 Then
+            Set riyuRng = ActiveDocument.Paragraphs(riyuTitleIndex).Range
+            riyuRng.Select
+            Selection.HomeKey Unit:=wdLine
+            Selection.InsertBreak Type:=wdPageBreak
+            'Selection.MoveDown Unit:=wdLine, Count:=1
+            'Selection.TypeParagraph
+            
+            '最終行での改ページ時に２ページ追加される場合の対応
+            Set lastRng = ActiveDocument.Paragraphs(ActiveDocument.Paragraphs.Count).Range
+            lastRng.Select
+            addPage = Selection.Information(wdActiveEndPageNumber) - lastPage '追加ページ数セット
+            If addPage > 1 Then
+                '改ページを一つ削除s
+                Set lastRng = ActiveDocument.Paragraphs(riyuTitleIndex).Range
+                lastRng.Select
+                Selection.EndKey Unit:=wdLine
+                Selection.TypeBackspace
+                
+            End If
+            
+        End If
+        
+        ' 理由部のページ数が奇数の場合偶数ページとするため、文末に１ページ追加
+        If riyuPageCnt Mod 2 = 1 Then
+            Set lastRng = ActiveDocument.Paragraphs(ActiveDocument.Paragraphs.Count).Range
+            lastRng.Select
+            Selection.EndKey Unit:=wdLine
+            Selection.InsertBreak Type:=wdPageBreak
+            'Selection.MoveDown Unit:=wdLine, Count:=1
+            'Selection.TypeParagraph
+            
+            '最終行での改ページ時に２ページ追加される場合の対応
+            '最終ページが奇数（偶数調整後なので奇数だとおかしいおかしい）
+            lastPage = Selection.Information(wdActiveEndPageNumber) 'ページ数セット
+            If lastPage Mod 2 = 1 Then
+                '改ページを一つ削除
+                Set lastRng = ActiveDocument.Paragraphs(ActiveDocument.Paragraphs.Count).Range
+                lastRng.Select
+                Selection.EndKey Unit:=wdLine
+                Selection.TypeBackspace
+                
+            End If
+        End If
+        
+    Else
+        ' 理由頁がなかった場合
+        
+        ' 最終ページ数が奇数の場合偶数ページとするため、文末に１ページ追加
+        If lastPage Mod 2 = 1 Then
+            Set lastRng = ActiveDocument.Paragraphs(ActiveDocument.Paragraphs.Count).Range
+            lastRng.Select
+            Selection.EndKey Unit:=wdLine
+            Selection.InsertBreak Type:=wdPageBreak
+            'Selection.MoveDown Unit:=wdLine, Count:=1
+            'Selection.TypeParagraph
+            
+            '最終行での改ページ時に２ページ追加される場合の対応
+            '最終ページが奇数（偶数調整後なので奇数だとおかしいおかしい）
+            lastPage = Selection.Information(wdActiveEndPageNumber) 'ページ数セット
+            If lastPage Mod 2 = 1 Then
+                '改ページを一つ削除
+                Set lastRng = ActiveDocument.Paragraphs(ActiveDocument.Paragraphs.Count).Range
+                lastRng.Select
+                Selection.EndKey Unit:=wdLine
+                Selection.TypeBackspace
+                
+            End If
+        End If
+    End If
+    
+End Sub
+
+Sub 句読点のぶら下げ処理()
+  '--------------------------------------------------------------------------
+  '句読点のぶら下げ処理を行う。
+  '--------------------------------------------------------------------------
+    
+    Dim checkToten As String ' ぶら下げ判定文字 "。"
+    Dim checkKutoten As String ' ぶら下げ判定文字 "、「"
+    checkToten = "。"
+    checkKutoten = "、「"
+    
+    Dim PageCnt As Single
+    Dim PageIndex As Single
+    Dim RectangleCnt As Single
+    Dim RectangleIndex As Single
+    Dim prePageLastRectangleIndex As Single
+    Dim lineCnt As Single
+    Dim lineIndex As Single
+    Dim prePageLastLineIndex As Single
+    Dim lineText As String
+    Dim reCheckFlg As Boolean
+    
+    With ActiveWindow
+        PageCnt = .ActivePane.Pages.Count
+        For PageIndex = 1 To PageCnt
+            If PageIndex > .ActivePane.Pages.Count Then
+                '調整後の総ページが変わる場合があるので、調整後の総ページを超えた場合は、処理を終了する。
+                Exit For
+            End If
+            reCheckFlg = False
+            RectangleCnt = .ActivePane.Pages(PageIndex).Rectangles.Count
+            For RectangleIndex = 1 To RectangleCnt
+                lineCnt = .ActivePane.Pages(PageIndex).Rectangles(RectangleIndex).Lines.Count
+                For lineIndex = 1 To lineCnt
+                    lineText = .ActivePane.Pages(PageIndex).Rectangles(RectangleIndex).Lines(lineIndex).Range.Text
+                    '読点のみ又は、句読点と鍵括弧から始まる行の場合、前の行の文字間隔を調整
+                    'If (Len(lineText) = 2 And Left(lineText, 1) = checkToten) Or (Left(lineText, 2) = checkKutoten) Then
+                    
+                    If (Len(lineText) = 2 And Left(lineText, 1) = checkToten) Then
+                        '読点のみの行の場合、前の行の文字間隔を調整
+                        If lineIndex = 1 Then
+                            '１行目の場合は前ページの最終行の文字間隔を調整
+                            prePageLastRectangleIndex = .ActivePane.Pages(PageIndex - 1).Rectangles.Count
+                            prePageLastLineIndex = .ActivePane.Pages(PageIndex - 1).Rectangles(prePageLastRectangleIndex).Lines.Count
+                            .ActivePane.Pages(PageIndex - 1).Rectangles(prePageLastRectangleIndex).Lines(prePageLastLineIndex).Range.Select
+                        Else
+                            .ActivePane.Pages(PageIndex).Rectangles(RectangleIndex).Lines(lineIndex - 1).Range.Select
+                        End If
+                        Selection.Font.Spacing = -0.1
+                        
+                        'ぶら下げ処理後は該当ページの最初から再処理
+                        reCheckFlg = True
+                        PageIndex = PageIndex - 1
+                        Exit For
+                    End If
+                Next
+                    
+                If reCheckFlg = True Then
+                    Exit For
+                End If
+            Next
+        Next
+    End With
+
+End Sub
+Sub 枠表示切替フォーム非表示()
+    Unload 枠表示切替form
+End Sub
+
+Sub 枠表示切替フォーム表示()
+    Load 枠表示切替form
+    枠表示切替form.Show
+    '枠表示切替form.StartUpPosition = 3
+    枠表示切替form.Top = Application.Top + 144
+    枠表示切替form.Left = Application.Left + 40
+End Sub
+Sub ページクリア()
+  '--------------------------------------------------------------------------
+  '開始時にページをクリアする。
+  '--------------------------------------------------------------------------
+    
+    Call 枠表示切替フォーム非表示
+    
+    '現在のページを全削除
+    Selection.WholeStory
+    Selection.Delete Unit:=wdCharacter, Count:=1
+    
+    '枠線非表示
+    With Selection.Sections(1)
+        .Borders(wdBorderLeft).LineStyle = wdLineStyleNone
+        .Borders(wdBorderRight).LineStyle = wdLineStyleNone
+        .Borders(wdBorderTop).LineStyle = wdLineStyleNone
+        .Borders(wdBorderBottom).LineStyle = wdLineStyleNone
+        With .Borders
+            .DistanceFrom = wdBorderDistanceFromPageEdge
+            .AlwaysInFront = True
+            .SurroundHeader = False
+            .SurroundFooter = False
+            .JoinBorders = False
+            .DistanceFromTop = 24
+            .DistanceFromLeft = 24
+            .DistanceFromBottom = 24
+            .DistanceFromRight = 24
+            .Shadow = False
+            .EnableFirstPageInSection = True
+            .EnableOtherPagesInSection = True
+            .ApplyPageBordersToAllSections
+        End With
+    End With
+    With Options
+        .DefaultBorderLineStyle = wdLineStyleThinThickSmallGap
+        .DefaultBorderLineWidth = wdLineWidth300pt
+        .DefaultBorderColor = 11665261
+    End With
+    
+End Sub
+
+
