@@ -1,0 +1,540 @@
+'-･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･-
+'e-LAWS参照条文作成マクロ 20170302
+'Based on
+'法令事務支援マクロ（Word版）
+'Copyright(C)2014 Kengo Kasaoka
+'This software is released under the MIT License.
+'http://opensource.org/licenses/mit-license.php
+'-･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･-
+
+Sub eLAWS参照条文作成_片面印刷用()
+'-･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･-
+' 【概要】
+'     「参照条文作成_両面印刷用」を元にe-LAWS用に改修。
+'     e-LAWSの参照条文HTMLを現行日本法規風の様式に調整する。
+'
+' 【履歴】
+' 　　2017/02/10　ver.1.0　新規作成
+'     2017/02/28  ver.1.1  片面印刷用に変更
+'-･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･-
+
+    Dim fRng As Range
+    Dim sWrds() As Variant, rWrds() As Variant
+    Dim Num As Integer
+    
+  'ヘッダー又はフッターの編集画面になっている場合への対応
+        ActiveWindow.ActivePane.View.SeekView = wdSeekMainDocument
+  
+  '[2a] 半角スペースの処理（２つ連続する半角スペースは全角に置換し、１つ単独のものは抹消）
+  
+        Call 半角スペース処理_全文
+    
+  '[3a] 項番号等の縦中横の処理を行う。
+  
+        Call 項番号縦中横等処理_全文
+ 
+  '[4b] 体裁の調整（現行日本法規風の体裁）
+  
+        Call eLAWS体裁調整_全文
+        
+  '[4b-2] 見出し字下げ
+  '★追加
+  
+        Call 見出し字下げ
+
+  '[6C] ヘッダー及びフッターに作成日時、法令名及びページ番号を加える。
+  '★差し替え（6B→6C）
+
+        Call eLAWSヘッダーフッター処理("片面")
+    
+  '初字の位置に戻る。
+        ActiveDocument.Range(0, 0).Select
+
+End Sub
+
+Sub eLAWS参照条文作成_両面印刷用()
+'-･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･-
+' 【概要】
+'     「参照条文作成_両面印刷用」を元にe-LAWS用に改修。
+'     e-LAWSの参照条文HTMLを現行日本法規風の様式に調整する。
+'
+' 【履歴】
+' 　　2017/02/28　ver.1.0　eLAWS参照条文作成_片面印刷用から派生
+'-･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･-
+
+    Dim fRng As Range
+    Dim sWrds() As Variant, rWrds() As Variant
+    Dim Num As Integer
+    
+  'ヘッダー又はフッターの編集画面になっている場合への対応
+        ActiveWindow.ActivePane.View.SeekView = wdSeekMainDocument
+  
+  '[2a] 半角スペースの処理（２つ連続する半角スペースは全角に置換し、１つ単独のものは抹消）
+  
+        Call 半角スペース処理_全文
+    
+  '[3a] 項番号等の縦中横の処理を行う。
+  
+        Call 項番号縦中横等処理_全文
+ 
+  '[4b] 体裁の調整（現行日本法規風の体裁）
+  
+        Call eLAWS体裁調整_全文
+        
+  '[4b-2] 見出し字下げ
+  '★追加
+  
+        Call 見出し字下げ
+
+  '[6C] ヘッダー及びフッターに作成日時、法令名及びページ番号を加える。
+  '★差し替え（6B→6C）
+
+        Call eLAWSヘッダーフッター処理("両面")
+    
+  '初字の位置に戻る。
+        ActiveDocument.Range(0, 0).Select
+
+End Sub
+
+Private Sub 半角スペース処理_全文()
+'[2a]
+'-･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･-
+' 【概要】
+' 　　【全文】半角スペースの処理（２つ連続する半角スペースは全角に置換し、１つ単独のものは抹消）
+'
+' 【履歴】
+' 　　2014/10/29　ver.1.0 　新規作成
+'-･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･-
+
+    With ActiveDocument.Content.Find
+        .Text = "  "
+        .Replacement.Text = "　"
+        .MatchByte = True
+        .MatchSoundsLike = False
+        .Execute Replace:=wdReplaceAll
+    End With
+    
+    With ActiveDocument.Content.Find
+        .Text = " "
+        .Replacement.Text = ""
+        .MatchByte = True
+        .MatchSoundsLike = False
+        .Execute Replace:=wdReplaceAll
+    End With
+    
+End Sub
+
+Private Sub 項番号縦中横等処理_全文()
+'[3a]
+'-･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･-
+' 【概要】
+' 　　 全文に項番号等に縦中横等の処理を行う。
+'
+' 【履歴】
+' 　　2014/10/29　ver.1.0 　可読性向上のためのコードの整理
+'
+' 【留意事項】
+' 　　使用される元号が加わった場合、コードの修正が必要です。
+'-･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･-
+
+  '半角数字と半角括弧等『 ()[]｢｣｡､ 』を全角にする。
+    Set fRng = ActiveDocument.Range(Start:=0, End:=0)
+    With fRng.Find
+        .MatchCase = False
+        .MatchWholeWord = False
+        .MatchByte = False
+        .MatchAllWordForms = False
+        .MatchSoundsLike = False
+        .MatchFuzzy = False
+        .MatchWildcards = True
+        .Text = "[0-9)([\]｢｣｡､]{1,}"
+    End With
+    Do
+        If fRng.Find.Execute = False Then Exit Do
+        fRng.CharacterWidth = wdWidthFullWidth
+        fRng.Collapse Direction:=wdCollapseEnd
+    Loop
+
+  '括弧付き数字を半角にし、縦中横の処理を行う。
+    Set fRng = ActiveDocument.Range(Start:=0, End:=0)
+    With fRng.Find
+        .MatchWildcards = True
+        .Text = "（[０-９]{1,}）"
+    End With
+    Do
+        If fRng.Find.Execute = False Then Exit Do
+        fRng.CharacterWidth = wdWidthHalfWidth
+        fRng.HorizontalInVertical = wdHorizontalInVerticalFitInLine '幅を広くする場合 → wdHorizontalInVerticalResizeLine
+        fRng.Collapse Direction:=wdCollapseEnd
+    Loop
+    
+  '項番号のない項の処理　「○１　」→「①　」　※「○２０　」まで
+    sWrds = Array("○１　", "○２　", "○３　", "○４　", "○５　", "○６　", "○７　", "○８　", "○９　", "○１０　" _
+                , "○１１　", "○１２　", "○１３　", "○１４　", "○１５　", "○１６　", "○１７　", "○１８　", "○１９　", "○２０　")
+    rWrds = Array("①　", "②　", "③　", "④　", "⑤　", "⑥　", "⑦　", "⑧　", "⑨　", "⑩　", _
+                "⑪　", "⑫　", "⑬　", "⑭　", "⑮　", "⑯　", "⑰　", "⑱　", "⑲　", "⑳　")
+    With ActiveDocument.Content.Find
+        For Num = LBound(sWrds) To UBound(sWrds)
+            .Text = sWrds(Num)
+            .Replacement.Text = rWrds(Num)
+            .Execute Replace:=wdReplaceAll
+        Next Num
+    End With
+    
+  '項番号の二桁の数字を半角にし、縦中横の処理を行う。
+    Set fRng = ActiveDocument.Range(Start:=0, End:=0)
+    With fRng.Find
+        .MatchWildcards = True
+        .Text = "[０-９]{2}　[!　]"
+    End With
+    Do
+        If fRng.Find.Execute = False Then Exit Do
+        fRng.MoveEnd wdCharacter, -2
+        fRng.CharacterWidth = wdWidthHalfWidth
+        fRng.HorizontalInVertical = wdHorizontalInVerticalFitInLine
+        fRng.Collapse Direction:=wdCollapseEnd
+    Loop
+    
+  '算用数字で標記されている法令番号及び年月日の処理（２～３桁の数字を半角にし、縦中横の処理を行う。）
+  
+   '年（※法情報総合データベースの表記に対応する部分）
+    Set fRng = ActiveDocument.Range(Start:=0, End:=0)
+    With fRng.Find
+        .MatchWildcards = True
+        .Text = "[治正和成][０-９]{2,3}年"  '　←　使用される元号が増えた際、この部分に加筆の必要性あり
+    End With
+    Do
+        If fRng.Find.Execute = False Then Exit Do
+        fRng.MoveStart wdCharacter, 1
+        fRng.MoveEnd wdCharacter, -1
+        fRng.CharacterWidth = wdWidthHalfWidth
+        fRng.HorizontalInVertical = wdHorizontalInVerticalFitInLine
+        fRng.Collapse Direction:=wdCollapseEnd
+    Loop
+    
+   '月
+    Set fRng = ActiveDocument.Range(Start:=0, End:=0)
+    With fRng.Find
+        .MatchWildcards = True
+        .Text = "年[０-９]{2}月"
+    End With
+    Do
+        If fRng.Find.Execute = False Then Exit Do
+        fRng.MoveStart wdCharacter, 1
+        fRng.MoveEnd wdCharacter, -1
+        fRng.CharacterWidth = wdWidthHalfWidth
+        fRng.HorizontalInVertical = wdHorizontalInVerticalFitInLine
+        fRng.Collapse Direction:=wdCollapseEnd
+    Loop
+    
+   '日
+    Set fRng = ActiveDocument.Range(Start:=0, End:=0)
+    With fRng.Find
+        .MatchWildcards = True
+        .Text = "月[０-９]{2}日"
+    End With
+    Do
+        If fRng.Find.Execute = False Then Exit Do
+        fRng.MoveStart wdCharacter, 1
+        fRng.MoveEnd wdCharacter, -1
+        fRng.CharacterWidth = wdWidthHalfWidth
+        fRng.HorizontalInVertical = wdHorizontalInVerticalFitInLine
+        fRng.Collapse Direction:=wdCollapseEnd
+    Loop
+    
+   '法令番号
+    Set fRng = ActiveDocument.Range(Start:=0, End:=0)
+    With fRng.Find
+        .MatchWildcards = True
+        .Text = "第[０-９]{2,3}号"
+    End With
+    Do
+        If fRng.Find.Execute = False Then Exit Do
+        fRng.MoveStart wdCharacter, 1
+        fRng.MoveEnd wdCharacter, -1
+        fRng.CharacterWidth = wdWidthHalfWidth
+        fRng.HorizontalInVertical = wdHorizontalInVerticalFitInLine
+        fRng.Collapse Direction:=wdCollapseEnd
+    Loop
+
+  '（i）、（ii）、（iii）の括弧を半角にし、縦中横の処理を行う。
+    Set fRng = ActiveDocument.Range(Start:=0, End:=0)
+    With fRng.Find
+        .MatchWildcards = True
+        .Text = "（[ivx]{1,}）"
+    End With
+    Do
+        If fRng.Find.Execute = False Then Exit Do
+        fRng.CharacterWidth = wdWidthHalfWidth
+        fRng.HorizontalInVertical = wdHorizontalInVerticalFitInLine
+        fRng.Collapse Direction:=wdCollapseEnd
+    Loop
+
+End Sub
+
+Private Sub eLAWS体裁調整_全文()
+'[4b]
+'-･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･-
+' 【概要】
+'     「参照条文作成_両面印刷用」を元にe-LAWS用に改修。
+' 　　【全文】用紙サイズ及びフォントの体裁を調整する。（e-LAWS用）
+'　　　※「ぎょうせい」の現行日本法規（紙媒体）をＡ４サイズに印刷したものに近い体裁としている。
+'
+' 【履歴】
+' 　　2017/02/09　ver.1.0 　新規作成
+'-･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･-
+  
+  '本文のフォントの調整（フォントファミリーはHTMLで指定）
+    Selection.WholeStory
+    With Selection
+        .Font.Size = 11  'ChangedFontSizeと同一の値とする。
+        .Orientation = wdTextOrientationHorizontalRotatedFarEast '横書き（日本語文字を左に90度回転）
+    End With
+    
+    '表中のフォントがゴシックになるため、明朝に
+    For Each tbl In ActiveDocument.Tables
+        With tbl.Range
+            .Font.Name = "ＭＳ 明朝"
+        End With
+    Next
+    
+  '用紙サイズをA4に変更
+    ActiveDocument.PageSetup.PaperSize = wdPaperA4
+        
+  '行間
+    Selection.WholeStory
+    With Selection.ParagraphFormat
+        .LineSpacingRule = wdLineSpaceExactly
+        .LineSpacing = 20.2
+        .SpaceAfterAuto = False
+        .SpaceBeforeAuto = False
+    End With
+
+  '用紙設定
+    With ActiveDocument.PageSetup
+        .Orientation = wdOrientLandscape '用紙を横向きに
+        .TopMargin = MillimetersToPoints(23)
+        .BottomMargin = MillimetersToPoints(23)
+        .LeftMargin = MillimetersToPoints(25)
+        .RightMargin = MillimetersToPoints(25)
+        .HeaderDistance = MillimetersToPoints(12.7)
+        .FooterDistance = MillimetersToPoints(12.7)
+        .LinesPage = 23 '23行（結果的に１行30文字）
+        .LayoutMode = wdLayoutModeLineGrid
+    End With
+    
+  '段組
+    With ActiveDocument.PageSetup.TextColumns
+        .SetCount NumColumns:=2
+        .EvenlySpaced = True
+        .LineBetween = True
+        .Width = MillimetersToPoints(117.1)
+        .Spacing = MillimetersToPoints(12.7)
+    End With
+    
+    
+  '法令名のフォントサイズの調整
+    For Each para In Selection.Paragraphs
+        Set RE = CreateObject("VBScript.RegExp")
+            RE.Global = False
+        RE.Pattern = "^[○●]"  '←★修正（2/15）廃止法令「●」に対応
+        Set matches = RE.Execute(para.Range)
+        If matches.Count > 0 Then
+            With para.Range
+                .Font.Size = 15
+                .ParagraphFormat.LeftIndent = 48
+                .ParagraphFormat.FirstLineIndent = -15
+                .ParagraphFormat.KeepTogether = True
+                .ParagraphFormat.KeepWithNext = True
+                If .Start <> 0 Then
+                    '.ParagraphFormat.LineUnitBefore = 1
+                    .InsertBreak Type:=wdSectionBreakNextPage  '←★追記（2/13）（改ページ・セクション切替）
+                    '.InsertBreak Type:=wdSectionBreakOddPage  '←改ページ後、奇数ページから開始させたい場合
+                    
+                End If
+            End With
+        End If
+    Next
+    
+End Sub
+
+
+Private Sub 見出し字下げ()
+'[4b-2]
+'-･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･-
+' 【概要】
+' 　　見出しを１字下げにする。
+'
+' 【履歴】
+' 　　2017/02/14　ver.1.0 　新規作成
+'-･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･-
+  
+  '標準のフォントサイズを取得
+    fsnormal = ActiveDocument.Styles(wdStyleNormal).Font.Size
+    
+    Set RE = CreateObject("VBScript.RegExp")
+        RE.Global = False
+    
+    For Each para In ActiveDocument.Paragraphs
+    
+      '見出しの字下げ
+        RE.Pattern = "^（.+）"
+        Set matches = RE.Execute(para.Range)
+        
+        If matches.Count > 0 Then
+            With para.Range.ParagraphFormat
+                .LeftIndent = 0
+                .FirstLineIndent = fsnormal
+            End With
+        End If
+    Next
+    
+    Set RE = Nothing
+    Set matches = Nothing
+            
+End Sub
+  
+Private Sub eLAWSヘッダーフッター処理(pageType As String)
+'[6C]
+'-･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･-
+' 【概要】
+' 　　ヘッダー及びフッターに作成日時、法令名及びページ番号を付記する。
+'
+' 【履歴】
+' 　　2017/02/12　ver.1.0 　新規作成
+' 　　2017/02/28  ver.1.1   サブルーチン名変更、時点・施行日情報出力
+' 　　2017/03/01  ver.1.2   ヘッダー／フッターの表記変更
+' 　　2017/03/02  ver.1.3   e-LAWSステータス表記変更
+'-･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･- -･-
+
+    Dim lawTitle As String
+    Dim lawStatus As String
+    Dim referDate As String
+    Dim amendmentNo As String
+    Dim enforcementDate As String
+    Set RE = CreateObject("VBScript.RegExp")
+        RE.Global = False
+
+  '奇数ページと偶数ページのフッター、ヘッダーは共通（片面印刷時）
+    If pageType = "両面" Then
+        ActiveDocument.PageSetup.OddAndEvenPagesHeaderFooter = True  '両面印刷時
+    Else
+        ActiveDocument.PageSetup.OddAndEvenPagesHeaderFooter = False  '片面印刷時
+    End If
+    
+    ActiveWindow.ActivePane.View.SeekView = wdSeekCurrentPageHeader
+
+    Dim sec As Section
+    Dim hd_ft As HeaderFooter
+    
+    For Each sec In ActiveDocument.Sections
+        lawTitle = ""
+        lawStatus = ""
+        amendmentNo = ""
+        enforcementDate = ""
+    
+        For Each hd_ft In sec.Footers
+            hd_ft.LinkToPrevious = False
+        Next
+
+        For Each hd_ft In sec.Headers
+            hd_ft.LinkToPrevious = False
+        Next
+        
+        '法令名の取得
+        Dim myRange As Range
+        Set myRange = sec.Range.Sentences(1)
+        If sec.Range.Characters(1) = "○" Then myRange.MoveStart wdCharacter, 1
+        If sec.Range.Characters(1) = "●" Then myRange.MoveStart wdCharacter, 1
+        myRange.MoveEnd wdCharacter, -1 '改行削除
+        
+        lawTitle = myRange.Text
+        
+        For j = 2 To 4
+            If sec.Range.Sentences.Count >= j Then
+                Set myRange = sec.Range.Sentences(j)
+                myRange.MoveEnd wdCharacter, -1 '改行削除
+                
+                RE.Pattern = "^.*(時点|による改正|までに施行されている分|施行|e-LAWS認証).*$"
+                If RE.Replace(myRange.Text, "$1") = "時点" Then
+                    referDate = myRange.Text
+                ElseIf RE.Replace(myRange.Text, "$1") = "e-LAWS認証" Then
+                    lawStatus = myRange.Text
+                ElseIf RE.Replace(myRange.Text, "$1") = "による改正" Then
+                    amendmentNo = myRange.Text & "　"
+                ElseIf (RE.Replace(myRange.Text, "$1") = "施行") Or (RE.Replace(myRange.Text, "$1") = "までに施行されている分") Then
+                    enforcementDate = myRange.Text
+                End If
+            End If
+        Next
+
+        'ヘッダー（ページ右側・全体）に作成日時を加える。（同一性の担保、バージョン管理の意図）
+        sec.Headers(wdHeaderFooterPrimary).Range.Select
+        Selection.TypeBackspace
+        
+        With Selection
+            .Font.Name = "ＭＳ ゴシック"
+            .Font.Size = 6
+            .ParagraphFormat.Alignment = wdAlignParagraphRight
+            .TypeText Text:="参照条文ファイル更新日時："
+            .Fields.Add Range:=Selection.Range, Type:=wdFieldEmpty, Text:= _
+                "DATE  \@ ""yyyy/MM/dd H:mm:ss"" ", PreserveFormatting:=False
+            .InsertAfter Chr(10) & "（" & amendmentNo & enforcementDate & "　" & lawStatus & "）"
+        End With
+
+        'フッター（ページ左側・セクション別）に法令名とページ番号を加える。（検索性の向上の意図）
+        sec.Footers(wdHeaderFooterPrimary).Range.Select
+        'セクションの最初のページ番号の設定
+        With sec.Footers(1).PageNumbers
+            .RestartNumberingAtSection = True
+            .StartingNumber = 1
+        End With
+        
+        Selection.TypeBackspace
+
+        With Selection
+            .Font.Name = "ＭＳ 明朝"
+            .Font.Size = 10
+            .ParagraphFormat.Alignment = wdAlignParagraphCenter
+            .TypeText Text:="（" & lawTitle & "）　"
+            .Fields.Add Range:=Selection.Range, Text:="PAGE  \* DBNUM1 "
+             .InsertAfter " ／ "
+            .Collapse Direction:=wdCollapseEnd
+            .Fields.Add Range:=Selection.Range, Text:="SECTIONPAGES  \* DBNUM1 ", Type:=wdFieldEmpty
+        End With
+        
+        If pageType = "両面" Then
+            sec.Headers(wdHeaderFooterEvenPages).Range.Select
+            Selection.TypeBackspace
+    
+            With Selection
+                .Font.Name = "ＭＳ 明朝"
+                .Font.Size = 10
+                .ParagraphFormat.Alignment = wdAlignParagraphCenter
+                .TypeText Text:="（" & lawTitle & "）　"
+                .Fields.Add Range:=Selection.Range, Text:="PAGE  \* DBNUM1 "
+                 .InsertAfter " ／ "
+                .Collapse Direction:=wdCollapseEnd
+                .Fields.Add Range:=Selection.Range, Text:="SECTIONPAGES  \* DBNUM1 ", Type:=wdFieldEmpty
+            End With
+            
+            sec.Footers(wdHeaderFooterEvenPages).Range.Select
+            Selection.TypeBackspace
+            
+            With Selection
+                .Font.Name = "ＭＳ ゴシック"
+                .Font.Size = 6
+                .ParagraphFormat.Alignment = wdAlignParagraphRight
+                .TypeText Text:="参照条文ファイル更新日時："
+                .Fields.Add Range:=Selection.Range, Type:=wdFieldEmpty, Text:= _
+                    "DATE  \@ ""yyyy/MM/dd H:mm:ss"" ", PreserveFormatting:=False
+                .InsertAfter Chr(10) & "（" & amendmentNo & enforcementDate & "　" & lawStatus & "）"
+            End With
+        End If
+    Next
+
+    ActiveWindow.ActivePane.View.SeekView = wdSeekMainDocument
+
+End Sub
+
+
